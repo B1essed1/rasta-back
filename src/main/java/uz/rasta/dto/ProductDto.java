@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import uz.rasta.entity.Product;
+import uz.rasta.entity.ProductImage;
 import uz.rasta.entity.ProductVariant;
 
 import java.math.BigDecimal;
@@ -62,6 +63,22 @@ public final class ProductDto {
     ) {
     }
 
+    public record ImageResponse(
+            UUID id,
+            UUID variantId,
+            String url,
+            Integer sortOrder
+    ) {
+        public static ImageResponse from(ProductImage img) {
+            return new ImageResponse(
+                    img.getId(),
+                    img.getVariant() != null ? img.getVariant().getId() : null,
+                    img.getUrl(),
+                    img.getSortOrder()
+            );
+        }
+    }
+
     public record Response(
             UUID id,
             UUID shopId,
@@ -76,10 +93,11 @@ public final class ProductDto {
             Boolean visible,
             Integer sortOrder,
             String tone,
+            List<ImageResponse> images,
             List<VariantResponse> variants,
             Instant createdAt
     ) {
-        public static Response from(Product product, List<ProductVariant> variants) {
+        public static Response from(Product product, List<ProductVariant> variants, List<ProductImage> images) {
             return new Response(
                     product.getId(),
                     product.getShop().getId(),
@@ -94,6 +112,7 @@ public final class ProductDto {
                     product.getVisible(),
                     product.getSortOrder(),
                     product.getTone(),
+                    images.stream().map(ImageResponse::from).toList(),
                     variants.stream().map(VariantResponse::from).toList(),
                     product.getCreatedAt()
             );

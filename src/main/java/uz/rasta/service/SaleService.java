@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.rasta.config.ApiException;
 import uz.rasta.dto.OrderDto;
 import uz.rasta.entity.*;
 import uz.rasta.repository.*;
@@ -42,10 +43,10 @@ public class SaleService {
     @Transactional
     public OrderDto.SaleResponse createPosSale(UUID shopId, OrderDto.SaleCreateRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         int nextSaleNo = saleRepository.findMaxSaleNoByShopId(shopId) + 1;
@@ -69,7 +70,7 @@ public class SaleService {
             ProductVariant variant = null;
             if (item.variantId() != null) {
                 variant = variantRepository.findById(item.variantId())
-                        .orElseThrow(() -> new IllegalArgumentException("Variant not found: " + item.variantId()));
+                        .orElseThrow(() -> ApiException.notFound("variant.not.found"));
             }
 
             SaleLine saleLine = SaleLine.builder()

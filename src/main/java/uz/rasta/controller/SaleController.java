@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import uz.rasta.config.ApiResponse;
 import uz.rasta.dto.OrderDto;
 import uz.rasta.entity.User;
 import uz.rasta.service.SaleService;
@@ -21,18 +22,17 @@ public class SaleController {
     private final SaleService saleService;
 
     @GetMapping
-    public ResponseEntity<List<OrderDto.SaleResponse>> list(
+    public ResponseEntity<ApiResponse<List<OrderDto.SaleResponse>>> list(
             @PathVariable UUID shopId,
             @AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(saleService.listByShop(shopId));
+        return ResponseEntity.ok(ApiResponse.ok(saleService.listByShop(shopId)));
     }
 
     @PostMapping
-    public ResponseEntity<OrderDto.SaleResponse> create(
+    public ResponseEntity<ApiResponse<OrderDto.SaleResponse>> create(
             @PathVariable UUID shopId,
             @Valid @RequestBody OrderDto.SaleCreateRequest request,
             @AuthenticationPrincipal User currentUser) {
-        OrderDto.SaleResponse response = saleService.createPosSale(shopId, request, currentUser);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(saleService.createPosSale(shopId, request, currentUser)));
     }
 }

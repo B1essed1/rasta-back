@@ -3,6 +3,7 @@ package uz.rasta.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.rasta.config.ApiException;
 import uz.rasta.dto.ReviewDto;
 import uz.rasta.entity.Review;
 import uz.rasta.entity.Shop;
@@ -36,7 +37,7 @@ public class ReviewService {
     @Transactional
     public ReviewDto.Response create(UUID shopId, ReviewDto.CreateRequest request) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         Review review = Review.builder()
                 .shop(shop)

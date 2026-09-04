@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.rasta.config.ApiException;
 import uz.rasta.config.JwtUtil;
 import uz.rasta.dto.AuthResponse;
 import uz.rasta.entity.User;
@@ -28,7 +29,7 @@ public class AuthService {
     @Transactional
     public AuthResponse verify(String phone, String code) {
         if (!smsService.verifyCode(phone, code)) {
-            throw new IllegalArgumentException("Invalid or expired verification code");
+            throw ApiException.badRequest("auth.code.invalid");
         }
 
         User user = userRepository.findByPhone(phone)

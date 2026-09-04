@@ -7,6 +7,7 @@ import uz.rasta.dto.ShopDto;
 import uz.rasta.entity.Shop;
 import uz.rasta.entity.ShopConfig;
 import uz.rasta.entity.User;
+import uz.rasta.config.ApiException;
 import uz.rasta.repository.ShopConfigRepository;
 import uz.rasta.repository.ShopRepository;
 
@@ -27,22 +28,30 @@ public class ShopService {
                 .toList();
     }
 
+    public ShopDto.Response getByOwner(User owner) {
+        List<Shop> shops = shopRepository.findByOwnerId(owner.getId());
+        if (shops.isEmpty()) {
+            throw ApiException.notFound("shop.no.shop");
+        }
+        return ShopDto.Response.from(shops.get(0));
+    }
+
     public ShopDto.Response getByHandle(String handle) {
         Shop shop = shopRepository.findByHandle(handle)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found: " + handle));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
         return ShopDto.Response.from(shop);
     }
 
     public ShopDto.Response getById(UUID id) {
         Shop shop = shopRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
         return ShopDto.Response.from(shop);
     }
 
     @Transactional
     public ShopDto.Response create(ShopDto.CreateRequest request, User owner) {
         if (shopRepository.existsByHandle(request.handle())) {
-            throw new IllegalArgumentException("Handle already taken: " + request.handle());
+            throw ApiException.conflict("shop.handle.taken");
         }
 
         Shop shop = Shop.builder()
@@ -50,10 +59,12 @@ public class ShopService {
                 .name(request.name())
                 .tagline(request.tagline())
                 .location(request.location())
-                .type(request.type() != null ? request.type() : Shop.ShopType.OTHER)
+                .type(request.type() != null ? request.type() : "other")
                 .owner(owner)
                 .initials(extractInitials(request.name()))
                 .coverColor(request.coverColor())
+                .logoUrl(request.logoUrl())
+                .coverUrl(request.coverUrl())
                 .instagram(request.instagram())
                 .telegram(request.telegram())
                 .phone(request.phone())
@@ -73,10 +84,10 @@ public class ShopService {
     @Transactional
     public ShopDto.Response update(UUID shopId, ShopDto.UpdateRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         if (request.name() != null) shop.setName(request.name());
@@ -85,6 +96,8 @@ public class ShopService {
         if (request.type() != null) shop.setType(request.type());
         if (request.status() != null) shop.setStatus(request.status());
         if (request.coverColor() != null) shop.setCoverColor(request.coverColor());
+        if (request.logoUrl() != null) shop.setLogoUrl(request.logoUrl());
+        if (request.coverUrl() != null) shop.setCoverUrl(request.coverUrl());
         if (request.instagram() != null) shop.setInstagram(request.instagram());
         if (request.telegram() != null) shop.setTelegram(request.telegram());
         if (request.phone() != null) shop.setPhone(request.phone());
@@ -97,10 +110,10 @@ public class ShopService {
     @Transactional
     public void delete(UUID shopId, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         shopConfigRepository.findByShopId(shopId).ifPresent(shopConfigRepository::delete);
@@ -109,17 +122,17 @@ public class ShopService {
 
     public ShopDto.ConfigResponse getConfig(UUID shopId) {
         ShopConfig config = shopConfigRepository.findByShopId(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop config not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.config.not.found"));
         return ShopDto.ConfigResponse.from(config);
     }
 
     @Transactional
     public ShopDto.ConfigResponse updateConfig(UUID shopId, ShopDto.ConfigRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         ShopConfig config = shopConfigRepository.findByShopId(shopId)

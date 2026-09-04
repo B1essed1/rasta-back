@@ -37,9 +37,9 @@ public class Shop {
     @Column(length = 200)
     private String location;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private ShopType type;
+    @Column(nullable = false, length = 50)
+    @Builder.Default
+    private String type = "other";
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -65,6 +65,12 @@ public class Shop {
     @Column(name = "cover_color", length = 20)
     private String coverColor;
 
+    @Column(name = "logo_url", length = 500)
+    private String logoUrl;
+
+    @Column(name = "cover_url", length = 500)
+    private String coverUrl;
+
     @Column(length = 100)
     private String instagram;
 
@@ -77,10 +83,6 @@ public class Shop {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
-
-    public enum ShopType {
-        FASHION, FOOD, BEAUTY, HOME, GIFTS, ELECTRONICS, SPORTS, BOOKS, TOYS, OTHER
-    }
 
     public enum ShopStatus {
         LIVE, PAUSED, DRAFT

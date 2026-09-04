@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.rasta.config.ApiException;
 import uz.rasta.dto.OrderDto;
 import uz.rasta.entity.*;
 import uz.rasta.repository.*;
@@ -40,7 +41,7 @@ public class OrderService {
     @Transactional
     public OrderDto.Response create(UUID shopId, OrderDto.CreateRequest request) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         int nextOrderNo = orderRepository.findMaxOrderNoByShopId(shopId) + 1;
 
@@ -71,7 +72,7 @@ public class OrderService {
         List<OrderLine> lines = new ArrayList<>();
         for (OrderDto.LineRequest item : request.items()) {
             Product product = productRepository.findById(item.productId())
-                    .orElseThrow(() -> new IllegalArgumentException("Product not found: " + item.productId()));
+                    .orElseThrow(() -> ApiException.notFound("product.not.found"));
 
             ProductVariant variant = null;
             if (item.variantId() != null) {
@@ -98,21 +99,21 @@ public class OrderService {
     @Transactional
     public OrderDto.Response confirmOrder(UUID shopId, UUID orderId, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> ApiException.notFound("order.not.found"));
 
         if (!order.getShop().getId().equals(shopId)) {
-            throw new IllegalArgumentException("Order does not belong to this shop");
+            throw ApiException.badRequest("order.not.in.shop");
         }
 
         if (order.getStatus() != Order.OrderStatus.NEW) {
-            throw new IllegalStateException("Only NEW orders can be confirmed");
+            throw ApiException.conflict("order.only.new.confirm");
         }
 
         order.setStatus(Order.OrderStatus.CONFIRMED);
@@ -173,25 +174,25 @@ public class OrderService {
     @Transactional
     public OrderDto.Response updateStatus(UUID shopId, UUID orderId, Order.OrderStatus newStatus, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> ApiException.notFound("order.not.found"));
 
         if (!order.getShop().getId().equals(shopId)) {
-            throw new IllegalArgumentException("Order does not belong to this shop");
+            throw ApiException.badRequest("order.not.in.shop");
         }
 
         if (order.getStatus() == Order.OrderStatus.CANCELLED) {
-            throw new IllegalStateException("Cannot change status of a cancelled order");
+            throw ApiException.conflict("order.cancelled");
         }
 
         if (order.getStatus() == Order.OrderStatus.COMPLETED) {
-            throw new IllegalStateException("Cannot change status of a completed order");
+            throw ApiException.conflict("order.completed");
         }
 
         order.setStatus(newStatus);
@@ -204,18 +205,18 @@ public class OrderService {
     @Transactional
     public OrderDto.Response cancelOrder(UUID shopId, UUID orderId, OrderDto.CancelRequest request) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> ApiException.notFound("order.not.found"));
 
         if (!order.getShop().getId().equals(shopId)) {
-            throw new IllegalArgumentException("Order does not belong to this shop");
+            throw ApiException.badRequest("order.not.in.shop");
         }
 
         if (order.getStatus() == Order.OrderStatus.CANCELLED) {
-            throw new IllegalStateException("Order is already cancelled");
+            throw ApiException.conflict("order.cancelled");
         }
 
         if (order.getStatus() == Order.OrderStatus.COMPLETED) {
-            throw new IllegalStateException("Cannot cancel a completed order");
+            throw ApiException.conflict("order.completed");
         }
 
         boolean wasConfirmed = order.getStatus() != Order.OrderStatus.NEW;

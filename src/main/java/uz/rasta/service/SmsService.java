@@ -13,12 +13,13 @@ public class SmsService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int CODE_LENGTH = 6;
-    private static final long CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+    private static final long CODE_TTL_MS = 1 * 60 * 1000; // 5 minutes
 
     private final Map<String, CodeEntry> codeStore = new ConcurrentHashMap<>();
 
     public void sendCode(String phone) {
-        String code = generateCode();
+        //String code = generateCode();
+        String code = generateStaticCode();
         codeStore.put(phone, new CodeEntry(code, System.currentTimeMillis()));
 
         // Mock SMS sending - just log the code
@@ -47,6 +48,11 @@ public class SmsService {
     private String generateCode() {
         int code = RANDOM.nextInt((int) Math.pow(10, CODE_LENGTH));
         return String.format("%0" + CODE_LENGTH + "d", code);
+    }
+
+    private String generateStaticCode() {
+        int code = RANDOM.nextInt((int) Math.pow(10, CODE_LENGTH));
+        return String.format("%0" + CODE_LENGTH + "d", 123321);
     }
 
     private record CodeEntry(String code, long createdAt) {

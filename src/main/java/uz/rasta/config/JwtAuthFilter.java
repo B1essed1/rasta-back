@@ -15,8 +15,10 @@ import uz.rasta.entity.User;
 import uz.rasta.repository.UserRepository;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
+
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Component
 @RequiredArgsConstructor
@@ -49,9 +51,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         User user = userRepository.findById(userId).orElse(null);
 
         if (user != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            var authorities = List.of(
+                    new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(
-                            user, null, Collections.emptyList());
+                            user, null, authorities);
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authToken);
         }

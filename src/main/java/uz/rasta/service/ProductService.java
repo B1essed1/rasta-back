@@ -3,6 +3,7 @@ package uz.rasta.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uz.rasta.config.ApiException;
 import uz.rasta.dto.ProductDto;
 import uz.rasta.entity.*;
 import uz.rasta.repository.*;
@@ -17,6 +18,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final ProductVariantRepository variantRepository;
+    private final ProductImageRepository imageRepository;
     private final ShopRepository shopRepository;
     private final StockMovementRepository stockMovementRepository;
 
@@ -28,25 +30,27 @@ public class ProductService {
         return products.stream()
                 .map(p -> {
                     List<ProductVariant> variants = variantRepository.findByProductId(p.getId());
-                    return ProductDto.Response.from(p, variants);
+                    List<ProductImage> images = imageRepository.findByProductIdOrderBySortOrder(p.getId());
+                    return ProductDto.Response.from(p, variants, images);
                 })
                 .toList();
     }
 
     public ProductDto.Response getById(UUID productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+                .orElseThrow(() -> ApiException.notFound("product.not.found"));
         List<ProductVariant> variants = variantRepository.findByProductId(productId);
-        return ProductDto.Response.from(product, variants);
+        List<ProductImage> images = imageRepository.findByProductIdOrderBySortOrder(productId);
+        return ProductDto.Response.from(product, variants, images);
     }
 
     @Transactional
     public ProductDto.Response create(UUID shopId, ProductDto.CreateRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         Product product = Product.builder()
@@ -81,23 +85,24 @@ public class ProductService {
             }
         }
 
-        return ProductDto.Response.from(product, variants);
+        List<ProductImage> images = imageRepository.findByProductIdOrderBySortOrder(product.getId());
+        return ProductDto.Response.from(product, variants, images);
     }
 
     @Transactional
     public ProductDto.Response update(UUID shopId, UUID productId, ProductDto.UpdateRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+                .orElseThrow(() -> ApiException.notFound("product.not.found"));
 
         if (!product.getShop().getId().equals(shopId)) {
-            throw new IllegalArgumentException("Product does not belong to this shop");
+            throw ApiException.badRequest("product.not.in.shop");
         }
 
         if (request.catId() != null) product.setCatId(request.catId());
@@ -114,17 +119,14 @@ public class ProductService {
 
         product = productRepository.save(product);
 
-        // Update variants if provided
         List<ProductVariant> variants;
         if (request.variants() != null) {
-            // Get existing variant IDs
             List<ProductVariant> existingVariants = variantRepository.findByProductId(productId);
             List<UUID> incomingIds = request.variants().stream()
                     .map(ProductDto.VariantRequest::id)
                     .filter(id -> id != null)
                     .toList();
 
-            // Delete variants not in the incoming list
             for (ProductVariant ev : existingVariants) {
                 if (!incomingIds.contains(ev.getId())) {
                     variantRepository.delete(ev);
@@ -134,9 +136,8 @@ public class ProductService {
             variants = new ArrayList<>();
             for (ProductDto.VariantRequest vr : request.variants()) {
                 if (vr.id() != null) {
-                    // Update existing
                     ProductVariant existing = variantRepository.findById(vr.id())
-                            .orElseThrow(() -> new IllegalArgumentException("Variant not found: " + vr.id()));
+                            .orElseThrow(() -> ApiException.notFound("variant.not.found"));
                     if (vr.optionsJson() != null) existing.setOptionsJson(vr.optionsJson());
                     if (vr.barcode() != null) existing.setBarcode(vr.barcode());
                     if (vr.qty() != null) existing.setQty(vr.qty());
@@ -144,7 +145,6 @@ public class ProductService {
                     if (vr.threshold() != null) existing.setThreshold(vr.threshold());
                     variants.add(variantRepository.save(existing));
                 } else {
-                    // Create new variant
                     ProductVariant variant = ProductVariant.builder()
                             .product(product)
                             .optionsJson(vr.optionsJson())
@@ -160,25 +160,74 @@ public class ProductService {
             variants = variantRepository.findByProductId(productId);
         }
 
-        return ProductDto.Response.from(product, variants);
+        List<ProductImage> images = imageRepository.findByProductIdOrderBySortOrder(productId);
+        return ProductDto.Response.from(product, variants, images);
+    }
+
+    @Transactional
+    public ProductDto.ImageResponse addImage(UUID shopId, UUID productId, String url, UUID variantId, User currentUser) {
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
+        if (!shop.getOwner().getId().equals(currentUser.getId())) {
+            throw ApiException.forbidden("shop.not.owner");
+        }
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> ApiException.notFound("product.not.found"));
+        if (!product.getShop().getId().equals(shopId)) {
+            throw ApiException.badRequest("product.not.in.shop");
+        }
+
+        ProductVariant variant = null;
+        if (variantId != null) {
+            variant = variantRepository.findById(variantId)
+                    .orElseThrow(() -> ApiException.notFound("variant.not.found"));
+        }
+
+        int nextOrder = imageRepository.findByProductIdOrderBySortOrder(productId).size();
+
+        ProductImage image = ProductImage.builder()
+                .product(product)
+                .variant(variant)
+                .url(url)
+                .sortOrder(nextOrder)
+                .build();
+
+        image = imageRepository.save(image);
+        return ProductDto.ImageResponse.from(image);
+    }
+
+    @Transactional
+    public void removeImage(UUID shopId, UUID productId, UUID imageId, User currentUser) {
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
+        if (!shop.getOwner().getId().equals(currentUser.getId())) {
+            throw ApiException.forbidden("shop.not.owner");
+        }
+
+        ProductImage image = imageRepository.findById(imageId)
+                .orElseThrow(() -> ApiException.notFound("product.not.found"));
+
+        imageRepository.delete(image);
     }
 
     @Transactional
     public void delete(UUID shopId, UUID productId, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+                .orElseThrow(() -> ApiException.notFound("product.not.found"));
 
         if (!product.getShop().getId().equals(shopId)) {
-            throw new IllegalArgumentException("Product does not belong to this shop");
+            throw ApiException.badRequest("product.not.in.shop");
         }
 
+        imageRepository.deleteByProductId(productId);
         variantRepository.deleteByProductId(productId);
         productRepository.delete(product);
     }
@@ -186,18 +235,17 @@ public class ProductService {
     @Transactional
     public void restock(UUID shopId, ProductDto.RestockRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         ProductVariant variant = variantRepository.findById(request.variantId())
-                .orElseThrow(() -> new IllegalArgumentException("Variant not found"));
+                .orElseThrow(() -> ApiException.notFound("variant.not.found"));
 
         variant.setQty(variant.getQty() + request.qty());
 
-        // Recalculate weighted average cost
         if (request.unitCost() != null && variant.getAvgCost() != null) {
             int oldQty = variant.getQty() - request.qty();
             var oldTotal = variant.getAvgCost().multiply(java.math.BigDecimal.valueOf(oldQty));
@@ -226,18 +274,18 @@ public class ProductService {
     @Transactional
     public void adjust(UUID shopId, ProductDto.AdjustRequest request, User currentUser) {
         Shop shop = shopRepository.findById(shopId)
-                .orElseThrow(() -> new IllegalArgumentException("Shop not found"));
+                .orElseThrow(() -> ApiException.notFound("shop.not.found"));
 
         if (!shop.getOwner().getId().equals(currentUser.getId())) {
-            throw new SecurityException("You are not the owner of this shop");
+            throw ApiException.forbidden("shop.not.owner");
         }
 
         ProductVariant variant = variantRepository.findById(request.variantId())
-                .orElseThrow(() -> new IllegalArgumentException("Variant not found"));
+                .orElseThrow(() -> ApiException.notFound("variant.not.found"));
 
         variant.setQty(variant.getQty() + request.delta());
         if (variant.getQty() < 0) {
-            throw new IllegalArgumentException("Stock cannot go negative");
+            throw ApiException.badRequest("stock.negative");
         }
         variantRepository.save(variant);
 
@@ -245,7 +293,7 @@ public class ProductService {
         try {
             reason = StockMovement.MovementReason.valueOf(request.reason().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid reason: " + request.reason());
+            throw ApiException.badRequest("stock.reason.invalid");
         }
 
         StockMovement movement = StockMovement.builder()

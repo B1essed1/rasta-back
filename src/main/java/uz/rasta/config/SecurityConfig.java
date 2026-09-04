@@ -44,6 +44,18 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/shops/{shopId}/reviews").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/shops/{shopId}/orders/{id}/cancel").permitAll()
 
+                        // Categories - public read
+                        .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
+
+                        // Categories - admin only write
+                        .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/categories/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/categories/**").hasRole("ADMIN")
+
+                        // Media upload requires auth, no public GET needed (MinIO serves files directly)
+                        .requestMatchers(HttpMethod.POST, "/api/media").authenticated()
+
                         // Marketplace discovery
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/**").permitAll()
 
